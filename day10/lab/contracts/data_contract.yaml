@@ -1,60 +1,108 @@
-# Data contract — Lab Day 10 (tiếp nối artifact CS + IT Helpdesk)
-# Sinh viên bổ sung owner, SLA freshness, và nguồn canonical.
+# Data contract - Lab Day 10
 
-version: "1.0"
+version: "1.1"
 dataset: "kb_chunk_export"
-owner_team: "__TODO__"
+owner_team: "Day 10 Technical Owners"
 
 schema_cleaned:
   chunk_id:
     type: string
     required: true
-    description: "ID ổn định sau clean (thường hash hoặc doc_id + seq)"
+    description: "Stable id after clean: doc_id + seq + sha256(doc_id|chunk_text|seq)"
   doc_id:
     type: string
     required: true
-    description: "Khóa logic tài liệu nguồn (vd policy_refund_v4)"
+    description: "Logical source document id"
   chunk_text:
     type: string
     required: true
     constraints:
-      min_length: 8
+      min_length: 15
   effective_date:
     type: date
     required: true
+    format: "YYYY-MM-DD"
   exported_at:
     type: datetime
     required: true
+    format: "YYYY-MM-DDTHH:MM:SS"
 
 quality_rules:
   - id: "no_duplicate_chunk_text"
     severity: "warn"
   - id: "no_stale_refund_window"
-    description: "Không được để chunk policy refund chứa cửa sổ 14 ngày (lệch so với v4 = 7 ngày)"
+    description: "Refund policy must not contain stale 14-day window after clean."
+    severity: "halt"
+  - id: "no_stale_hr_10d_annual_leave"
+    description: "HR 2026 annual leave must not keep 2025 10-day annual leave text."
+    severity: "halt"
+  - id: "access_control_sop_has_data"
+    description: "Access Control SOP is required for Level 4 Admin Access grading."
+    severity: "halt"
+  - id: "exported_at_iso_datetime"
+    description: "exported_at must be normalized from slash date to ISO datetime."
+    severity: "halt"
+  - id: "refund_exception_has_digital_product_keywords"
+    description: "Refund exception chunk must include digital goods/license/subscription keywords."
+    severity: "halt"
+  - id: "sla_p1_update_frequency_has_30m_context"
+    description: "SLA P1 update-frequency chunk must include 30-minute context."
+    severity: "halt"
+  - id: "refund_no_ambiguous_context_chunks"
+    description: "Ambiguous refund chunks are quarantined because they confuse semantic retrieval."
+    severity: "halt"
+  - id: "access_standard_turnaround_has_2d_context"
+    description: "Standard Access Level 2 turnaround must keep 2-day context."
     severity: "halt"
 
 freshness:
-  measured_at: "publish"  # ingest | cleaned | publish
+  measured_at: "publish"
   sla_hours: 24
-  alert_channel: "__TODO__"
+  alert_channel: "#data-quality-day10"
+  latest_verified_status:
+    run_id: "final-day10"
+    status: "FAIL"
+    reason: "freshness_sla_exceeded"
+    latest_exported_at: "2026-04-11T00:00:00"
 
 canonical_sources:
   - path: "data/docs/policy_refund_v4.txt"
     doc_id: "policy_refund_v4"
+    owner: "CS"
   - path: "data/docs/sla_p1_2026.txt"
     doc_id: "sla_p1_2026"
+    owner: "IT"
   - path: "data/docs/it_helpdesk_faq.txt"
     doc_id: "it_helpdesk_faq"
+    owner: "IT"
   - path: "data/docs/hr_leave_policy.txt"
     doc_id: "hr_leave_policy"
+    owner: "HR"
+  - path: "data/docs/access_control_sop.txt"
+    doc_id: "access_control_sop"
+    owner: "IT Security"
 
-# Baseline allowlist export — nhóm mở rộng doc mới phải đồng bộ cleaning_rules + contract.
 allowed_doc_ids:
   - policy_refund_v4
   - sla_p1_2026
   - it_helpdesk_faq
   - hr_leave_policy
+  - access_control_sop
 
-# Merit/Distinction: có thể đưa cutoff versioning vào env và tham chiếu ở đây (tránh hard-code trong code).
+quarantine_policy:
+  unknown_doc_id: "quarantine until a canonical source is registered"
+  missing_effective_date: "quarantine and request upstream fix"
+  invalid_effective_date_format: "quarantine and request upstream fix"
+  missing_exported_at: "quarantine; freshness cannot be measured"
+  invalid_exported_at_format: "quarantine; timestamp cannot be normalized"
+  stale_hr_policy_effective_date: "quarantine old HR versions before 2026-01-01"
+  stale_hr_content_old_leave_quota: "quarantine HR chunks that still mention 10-day annual leave"
+  stale_sla_effective_date: "quarantine SLA chunks before 2026-01-01"
+  ambiguous_refund_context: "quarantine vague refund chunks"
+  duplicate_chunk_text: "drop duplicate, keep first ingestion-order copy"
+  missing_chunk_text: "drop because there is no retrievable content"
+
 policy_versioning:
   hr_leave_min_effective_date: "2026-01-01"
+  sla_p1_min_effective_date: "2026-01-01"
+  refund_current_window_business_days: 7

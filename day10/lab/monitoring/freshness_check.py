@@ -15,11 +15,14 @@ from typing import Any, Dict, Tuple
 def parse_iso(ts: str) -> datetime | None:
     if not ts:
         return None
+    normalized = ts.strip()
+    if len(normalized) >= 10 and normalized[4] == "/" and normalized[7] == "/":
+        normalized = f"{normalized[:4]}-{normalized[5:7]}-{normalized[8:]}"
     try:
         # Cho phép "2026-04-10T08:00:00" không có timezone
-        if ts.endswith("Z"):
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        dt = datetime.fromisoformat(ts)
+        if normalized.endswith("Z"):
+            return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(normalized)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt

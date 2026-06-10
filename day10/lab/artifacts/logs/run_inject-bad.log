@@ -1,0 +1,25 @@
+run_id=inject-bad
+raw_records=247
+cleaned_records=40
+quarantine_records=207
+cleaned_csv=artifacts\cleaned\cleaned_inject-bad.csv
+quarantine_csv=artifacts\quarantine\quarantine_inject-bad.csv
+expectation[min_one_row] OK (halt) :: cleaned_rows=40
+expectation[no_empty_doc_id] OK (halt) :: empty_doc_id_count=0
+expectation[refund_no_stale_14d_window] FAIL (halt) :: violations=2
+expectation[chunk_min_length_8] OK (warn) :: short_chunks=0
+expectation[effective_date_iso_yyyy_mm_dd] OK (halt) :: non_iso_rows=0
+expectation[hr_leave_no_stale_10d_annual] OK (halt) :: violations=0
+expectation[access_control_sop_has_data] OK (halt) :: access_control_sop_chunks=6
+expectation[all_rows_have_exported_at] OK (halt) :: missing_exported_at=0
+expectation[exported_at_iso_datetime] OK (halt) :: non_iso_exported_at=0
+expectation[refund_exception_has_digital_product_keywords] OK (halt) :: refund_exception_chunks=1
+expectation[sla_p1_update_frequency_has_30m_context] OK (halt) :: sla_p1_update_chunks=1
+expectation[refund_no_ambiguous_context_chunks] OK (halt) :: ambiguous_refund_chunks=0
+expectation[access_standard_turnaround_has_2d_context] OK (halt) :: access_standard_turnaround_chunks=1
+WARN: expectation failed but --skip-validate → tiếp tục embed (chỉ dùng cho demo Sprint 3).
+embed_prune_removed=2
+embed_upsert count=40 collection=day10_kb
+manifest_written=artifacts\manifests\manifest_inject-bad.json
+freshness_check=FAIL {"latest_exported_at": "2026-04-11T00:00:00", "age_hours": 1448.575, "sla_hours": 24.0, "reason": "freshness_sla_exceeded"}
+PIPELINE_OK

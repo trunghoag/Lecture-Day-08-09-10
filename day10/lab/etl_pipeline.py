@@ -31,6 +31,12 @@ from transform.cleaning_rules import clean_rows, load_raw_csv, write_cleaned_csv
 
 load_dotenv()
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except AttributeError:
+    pass
+
 ROOT = Path(__file__).resolve().parent
 RAW_DEFAULT = ROOT / "data" / "raw" / "policy_export_dirty.csv"
 ART = ROOT / "artifacts"
@@ -56,6 +62,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     log_path = LOG_DIR / f"run_{run_id.replace(':', '-')}.log"
     for p in (LOG_DIR, MAN_DIR, QUAR_DIR, CLEAN_DIR):
         p.mkdir(parents=True, exist_ok=True)
+    if log_path.exists():
+        log_path.unlink()
 
     def log(msg: str) -> None:
         print(msg)

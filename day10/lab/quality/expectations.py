@@ -112,5 +112,118 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7: access_control_sop phải có ít nhất 1 chunk (nguồn bắt buộc cho grading gq_d10_10)
+    acl_rows = [r for r in cleaned_rows if r.get("doc_id") == "access_control_sop"]
+    ok7 = len(acl_rows) >= 1
+    results.append(
+        ExpectationResult(
+            "access_control_sop_has_data",
+            ok7,
+            "halt",
+            f"access_control_sop_chunks={len(acl_rows)}",
+        )
+    )
+
+    # E8: không có chunk nào thiếu exported_at (bắt buộc cho freshness monitoring)
+    no_ts = [r for r in cleaned_rows if not (r.get("exported_at") or "").strip()]
+    ok8 = len(no_ts) == 0
+    results.append(
+        ExpectationResult(
+            "all_rows_have_exported_at",
+            ok8,
+            "halt",
+            f"missing_exported_at={len(no_ts)}",
+        )
+    )
+
+    # E9: exported_at phải parse được theo ISO datetime sau clean (R12)
+    ts_bad = [
+        r
+        for r in cleaned_rows
+        if not re.match(
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$",
+            (r.get("exported_at") or "").strip(),
+        )
+    ]
+    ok9 = len(ts_bad) == 0
+    results.append(
+        ExpectationResult(
+            "exported_at_iso_datetime",
+            ok9,
+            "halt",
+            f"non_iso_exported_at={len(ts_bad)}",
+        )
+    )
+
+    # E10: refund exception phải còn chunk rõ để trả lời câu hỏi sản phẩm không được hoàn tiền
+    refund_exception = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "policy_refund_v4"
+        and all(token in (r.get("chunk_text") or "") for token in ("hàng kỹ thuật số", "license key", "subscription"))
+    ]
+    ok10 = len(refund_exception) >= 1
+    results.append(
+        ExpectationResult(
+            "refund_exception_has_digital_product_keywords",
+            ok10,
+            "halt",
+            f"refund_exception_chunks={len(refund_exception)}",
+        )
+    )
+
+    # E11: SLA P1 phải có chunk rõ về cập nhật tiến độ mỗi 30 phút
+    p1_update = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "sla_p1_2026"
+        and "30 phút" in (r.get("chunk_text") or "")
+        and "cập nhật" in (r.get("chunk_text") or "")
+    ]
+    ok11 = len(p1_update) >= 1
+    results.append(
+        ExpectationResult(
+            "sla_p1_update_frequency_has_30m_context",
+            ok11,
+            "halt",
+            f"sla_p1_update_chunks={len(p1_update)}",
+        )
+    )
+
+    # E12: không để refund chunk mơ hồ lọt vào cleaned vì gây nhiễu semantic search
+    ambiguous_refund = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "policy_refund_v4"
+        and (r.get("chunk_text") or "").startswith("Nội dung không rõ ràng")
+    ]
+    ok12 = len(ambiguous_refund) == 0
+    results.append(
+        ExpectationResult(
+            "refund_no_ambiguous_context_chunks",
+            ok12,
+            "halt",
+            f"ambiguous_refund_chunks={len(ambiguous_refund)}",
+        )
+    )
+
+    # E13: access_control_sop phải có chunk rõ về Standard Access Level 2 turnaround
+    standard_access = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "access_control_sop"
+        and "Standard Access" in (r.get("chunk_text") or "")
+        and "2 ngày làm việc" in (r.get("chunk_text") or "")
+    ]
+    ok13 = len(standard_access) >= 1
+    results.append(
+        ExpectationResult(
+            "access_standard_turnaround_has_2d_context",
+            ok13,
+            "halt",
+            f"access_standard_turnaround_chunks={len(standard_access)}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt

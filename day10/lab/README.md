@@ -178,6 +178,20 @@ python eval_retrieval.py --out artifacts/eval/after_inject_bad.csv
 python grading_run.py --out artifacts/eval/grading_run.jsonl
 ```
 
+### Eval mở rộng bằng LLM-judge (tuỳ chọn Distinction)
+
+Nếu `.env` có `ckey_api_key`, `Base_url`, `ckey_model` hoặc các alias chuẩn
+`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, có thể chạy:
+
+```bash
+python llm_judge_eval.py --questions data/test_questions.json --out artifacts/eval/llm_judge_test_questions.jsonl
+python llm_judge_eval.py --questions data/grading_questions.json --out artifacts/eval/llm_judge_grading_questions.jsonl --top-k 5
+```
+
+LLM-judge là bằng chứng bổ sung, không thay thế `eval_retrieval.py`,
+`grading_run.py`, hoặc `instructor_quick_check.py`. Output JSONL gồm `judge_verdict`,
+`judge_score`, `judge_rationale`, `missing_evidence`, `unsupported_claims`.
+
 **Giảng viên — kiểm tra nhanh artifact (tuỳ chọn):**
 
 ```bash

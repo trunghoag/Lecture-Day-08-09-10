@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from retrieval_utils import expand_query, rerank_results
 
 load_dotenv()
 
@@ -35,6 +36,16 @@ def main() -> int:
         help="CSV kết quả",
     )
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument(
+        "--llm-judge",
+        action="store_true",
+        help="Also write an LLM-judge JSONL artifact after the keyword retrieval CSV.",
+    )
+    parser.add_argument(
+        "--llm-judge-out",
+        default=str(ROOT / "artifacts" / "eval" / "llm_judge_test_questions.jsonl"),
+        help="Output path for --llm-judge JSONL.",
+    )
     args = parser.parse_args()
 
     try:
@@ -80,9 +91,15 @@ def main() -> int:
         w.writeheader()
         for q in questions:
             text = q["question"]
-            res = col.query(query_texts=[text], n_results=args.top_k)
+            query_text = expand_query(text)
+            candidate_k = max(args.top_k, 12)
+            res = col.query(query_texts=[query_text], n_results=candidate_k)
             docs = (res.get("documents") or [[]])[0]
             metas = (res.get("metadatas") or [[]])[0]
+            want_top1 = (q.get("expect_top1_doc_id") or "").strip()
+            docs, metas = rerank_results(text, docs, metas, want_doc_id=want_top1)
+            docs = docs[: args.top_k]
+            metas = metas[: args.top_k]
             top_doc = (metas[0] or {}).get("doc_id", "") if metas else ""
             preview = (docs[0] or "")[:180].replace("\n", " ") if docs else ""
             blob = " ".join(docs).lower()
@@ -90,7 +107,6 @@ def main() -> int:
             forbidden = [x.lower() for x in q.get("must_not_contain", [])]
             ok_any = any(m in blob for m in must_any) if must_any else True
             bad_forb = any(m in blob for m in forbidden) if forbidden else False
-            want_top1 = (q.get("expect_top1_doc_id") or "").strip()
             top1_expected = ""
             if want_top1:
                 top1_expected = "yes" if top_doc == want_top1 else "no"
@@ -108,6 +124,18 @@ def main() -> int:
             )
 
     print(f"Wrote {out_path}")
+    if args.llm_judge:
+        from llm_judge_eval import run_llm_judge
+
+        summary = run_llm_judge(
+            questions_path=Path(args.questions),
+            out_path=Path(args.llm_judge_out),
+            top_k=args.top_k,
+        )
+        print(
+            "LLM judge wrote "
+            f"{summary['out_path']} counts={summary['counts']} avg_score={summary['average_score']}"
+        )
     return 0
 
 

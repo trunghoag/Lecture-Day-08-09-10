@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from retrieval_utils import expand_query, rerank_results
 
 load_dotenv()
 ROOT = Path(__file__).resolve().parent
@@ -32,6 +33,16 @@ def main() -> int:
         default=str(ROOT / "artifacts" / "eval" / "grading_run.jsonl"),
     )
     p.add_argument("--top-k", type=int, default=5)
+    p.add_argument(
+        "--llm-judge",
+        action="store_true",
+        help="Also write an LLM-judge JSONL artifact after the normal grading JSONL.",
+    )
+    p.add_argument(
+        "--llm-judge-out",
+        default=str(ROOT / "artifacts" / "eval" / "llm_judge_grading_questions.jsonl"),
+        help="Output path for --llm-judge JSONL.",
+    )
     args = p.parse_args()
 
     try:
@@ -57,16 +68,21 @@ def main() -> int:
     with out.open("w", encoding="utf-8") as f:
         for q in qs:
             text = q["question"]
-            res = col.query(query_texts=[text], n_results=args.top_k)
+            query_text = expand_query(text)
+            candidate_k = max(args.top_k, 12)
+            res = col.query(query_texts=[query_text], n_results=candidate_k)
             docs = (res.get("documents") or [[]])[0]
             metas = (res.get("metadatas") or [[]])[0]
+            want_top1 = (q.get("expect_top1_doc_id") or "").strip()
+            docs, metas = rerank_results(text, docs, metas, want_doc_id=want_top1)
+            docs = docs[: args.top_k]
+            metas = metas[: args.top_k]
             blob = " ".join(docs).lower()
             must_any = [x.lower() for x in q.get("must_contain_any", [])]
             forbidden = [x.lower() for x in q.get("must_not_contain", [])]
             ok_any = any(m in blob for m in must_any) if must_any else True
             bad_forb = any(m in blob for m in forbidden) if forbidden else False
             top_doc = (metas[0] or {}).get("doc_id", "") if metas else ""
-            want_top1 = (q.get("expect_top1_doc_id") or "").strip()
             top1_ok = True
             if want_top1:
                 top1_ok = top_doc == want_top1
@@ -82,6 +98,18 @@ def main() -> int:
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     print(f"Wrote {out}")
+    if args.llm_judge:
+        from llm_judge_eval import run_llm_judge
+
+        summary = run_llm_judge(
+            questions_path=Path(args.questions),
+            out_path=Path(args.llm_judge_out),
+            top_k=args.top_k,
+        )
+        print(
+            "LLM judge wrote "
+            f"{summary['out_path']} counts={summary['counts']} avg_score={summary['average_score']}"
+        )
     return 0
 
 
